@@ -47,9 +47,8 @@ type State interface {
 	Flag(c int) bool
 }
 
-// Formatter is the interface implemented by values with a custom formatter.
-// The implementation of Format may call Sprint(f) or Fprint(f) etc.
-// to generate its output.
+// Formatter 是自定义格式化化输出的接口.
+// 可以通过调用 Sprint(f) 、 Fprint(f) 等来显示格式化的输出.
 type Formatter interface {
 	Format(f State, c rune)
 }
@@ -101,30 +100,30 @@ func (bp *buffer) writeRune(r rune) {
 	*bp = b[:n+w]
 }
 
-// pp is used to store a printer's state and is reused with sync.Pool to avoid allocations.
+// pp 用于存储 printer 的状态并与 sync.Pool 一起使用以避免重复分配.
 type pp struct {
 	buf buffer
 
-	// arg holds the current item, as an interface{}.
+	// arg 代表当前保存的项, 类型是interface{}.
 	arg interface{}
 
-	// value is used instead of arg for reflect values.
+	// value 代表 arg 的 reflect.Value .
 	value reflect.Value
 
-	// fmt is used to format basic items such as integers or strings.
+	// fmt 用于指示如何格式化，如整数或字符串.
 	fmt fmt
 
-	// reordered records whether the format string used argument reordering.
+	// reordered 记录格式字符串是否使用了参数重新排序.
 	reordered bool
-	// goodArgNum records whether the most recent reordering directive was valid.
+	// goodArgNum 记录最近的重新排序指令是否有效.
 	goodArgNum bool
-	// panicking is set by catchPanic to avoid infinite panic, recover, panic, ... recursion.
+	// panicking 设置是否通过 catchPanic 处理panci，以避免无限惊慌，恢复，惊慌，... 递归.
 	panicking bool
-	// erroring is set when printing an error string to guard against calling handleMethods.
+	// erroring 在打印错误字符串时设置，以防止调用 handleMethods .
 	erroring bool
-	// wrapErrs is set when the format string may contain a %w verb.
+	// wrapErrs 当格式字符串可能包含 %w 时设置.
 	wrapErrs bool
-	// wrappedErr records the target of the %w verb.
+	// wrappedErr 在指定 warpErrs 的 %w 时，记录真实的error.
 	wrappedErr error
 }
 
@@ -195,7 +194,7 @@ func (p *pp) WriteString(s string) (ret int, err error) {
 	return len(s), nil
 }
 
-// These routines end in 'f' and take a format string.
+// These routines end in 'f' and take a format string.【
 
 // Fprintf formats according to a format specifier and writes to w.
 // It returns the number of bytes written and any write error encountered.
@@ -267,9 +266,9 @@ func Fprintln(w io.Writer, a ...interface{}) (n int, err error) {
 	return
 }
 
-// Println formats using the default formats for its operands and writes to standard output.
-// Spaces are always added between operands and a newline is appended.
-// It returns the number of bytes written and any write error encountered.
+// Println 使用默认的格式化参数格式化并打印到标准输出上.
+// 如果传入多个要打印的对象，会在不同的对象之间增加空格.
+// 返回写入的字节数以及发生的写入错误.
 func Println(a ...interface{}) (n int, err error) {
 	return Fprintln(os.Stdout, a...)
 }
@@ -284,9 +283,8 @@ func Sprintln(a ...interface{}) string {
 	return s
 }
 
-// getField gets the i'th field of the struct value.
-// If the field is itself is an interface, return a value for
-// the thing inside the interface, not the interface itself.
+// getField 获取 reflect.value 里的第 i 个值.
+// 如果 field 本身就是一个 interface, 那么就返回 interface 的值.
 func getField(v reflect.Value, i int) reflect.Value {
 	val := v.Field(i)
 	if val.Kind() == reflect.Interface && !val.IsNil() {
@@ -576,8 +574,8 @@ func (p *pp) handleMethods(verb rune) (handled bool) {
 		return
 	}
 	if verb == 'w' {
-		// It is invalid to use %w other than with Errorf, more than once,
-		// or with a non-error arg.
+		// %w 会自动执行 error 的 Unwrap 方法
+		// 所以对非 error 类型或多次对 error 类型使用都是无效的
 		err, ok := p.arg.(error)
 		if !ok || !p.wrapErrs || p.wrappedErr != nil {
 			p.wrappedErr = nil
@@ -590,7 +588,8 @@ func (p *pp) handleMethods(verb rune) (handled bool) {
 		verb = 'v'
 	}
 
-	// Is it a Formatter?
+	// 是不是 Formatter?
+	// 如果是，会调用 Format 进行格式化输出
 	if formatter, ok := p.arg.(Formatter); ok {
 		handled = true
 		defer p.catchPanic(p.arg, verb, "Format")
@@ -598,12 +597,12 @@ func (p *pp) handleMethods(verb rune) (handled bool) {
 		return
 	}
 
-	// If we're doing Go syntax and the argument knows how to supply it, take care of it now.
+	// 如果我们要打印 Go-synta 样式的参数，放在第一位进行处理
 	if p.fmt.sharpV {
 		if stringer, ok := p.arg.(GoStringer); ok {
 			handled = true
 			defer p.catchPanic(p.arg, verb, "GoString")
-			// Print the result of GoString unadorned.
+			// 直接打印 GoString 的结果.
 			p.fmt.fmtS(stringer.GoString())
 			return
 		}
@@ -639,6 +638,7 @@ func (p *pp) printArg(arg interface{}, verb rune) {
 	p.arg = arg
 	p.value = reflect.Value{}
 
+	// 如果要打印的参数是 nil ，根据 verb 的参数，进行处理
 	if arg == nil {
 		switch verb {
 		case 'T', 'v':
@@ -649,8 +649,8 @@ func (p *pp) printArg(arg interface{}, verb rune) {
 		return
 	}
 
-	// Special processing considerations.
-	// %T (the value's type) and %p (its address) are special; we always do them first.
+	// 特殊情况的考虑.
+	// %T (value的type) 和 %p (它的指针) 这两种特殊情况，先进行处理.
 	switch verb {
 	case 'T':
 		p.fmt.fmtS(reflect.TypeOf(arg).String())
@@ -660,7 +660,7 @@ func (p *pp) printArg(arg interface{}, verb rune) {
 		return
 	}
 
-	// Some types can be done without reflection.
+	// 有一些类型，不需要反射就可以直接打印他们的值.
 	switch f := arg.(type) {
 	case bool:
 		p.fmtBool(f, verb)
@@ -699,8 +699,8 @@ func (p *pp) printArg(arg interface{}, verb rune) {
 	case []byte:
 		p.fmtBytes(f, verb, "[]byte")
 	case reflect.Value:
-		// Handle extractable values with special methods
-		// since printValue does not handle them at depth 0.
+		// 使用专门的函数来处理 reflect.Value
+		// 因为 printValue 在 depth 0 时并不会处理.
 		if f.IsValid() && f.CanInterface() {
 			p.arg = f.Interface()
 			if p.handleMethods(verb) {
@@ -718,10 +718,10 @@ func (p *pp) printArg(arg interface{}, verb rune) {
 	}
 }
 
-// printValue is similar to printArg but starts with a reflect value, not an interface{} value.
-// It does not handle 'p' and 'T' verbs because these should have been already handled by printArg.
+// printValue 类似于 printArg，但是是用来处理 reflect.value ，而不是interface{}值。
+// 它不处理 ‘p’ 和 ‘t’ 动词，因为这些应该已经由 printArg 处理过了。
 func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
-	// Handle values with special methods if not already handled by printArg (depth == 0).
+	// 如果 printArg 尚未处理，则使用特殊方法处理值(depth = 0).
 	if depth > 0 && value.IsValid() && value.CanInterface() {
 		p.arg = value.Interface()
 		if p.handleMethods(verb) {
@@ -733,6 +733,7 @@ func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 
 	switch f := value; value.Kind() {
 	case reflect.Invalid:
+		// 如果 value 是零值，那么Kind()会返回 reflect.Invalid
 		if depth == 0 {
 			p.buf.writeString(invReflectString)
 		} else {
@@ -771,6 +772,8 @@ func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 			p.buf.writeString(mapString)
 		}
 		sorted := fmtsort.Sort(f)
+
+		// 如果是 reflect.Map 需要递归进行 print
 		for i, key := range sorted.Key {
 			if i > 0 {
 				if p.fmt.sharpV {
@@ -793,6 +796,9 @@ func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 			p.buf.writeString(f.Type().String())
 		}
 		p.buf.writeByte('{')
+
+		// 如果是 reflect.Struct 需要递归进行 print
+		// NumField() 用在 reflect.Struct 上回返回所有的 fields 的总数
 		for i := 0; i < f.NumField(); i++ {
 			if i > 0 {
 				if p.fmt.sharpV {
@@ -807,10 +813,14 @@ func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 					p.buf.writeByte(':')
 				}
 			}
+
+			// getField 会拆分所有的 reflect.Struct 为每个具体的 field
+			// 然后，重新使用 printValue 来处理 这个 field
 			p.printValue(getField(f, i), verb, depth+1)
 		}
 		p.buf.writeByte('}')
 	case reflect.Interface:
+		// reflect.Interface 的处理
 		value := f.Elem()
 		if !value.IsValid() {
 			if p.fmt.sharpV {
@@ -823,6 +833,7 @@ func (p *pp) printValue(value reflect.Value, verb rune, depth int) {
 			p.printValue(value, verb, depth+1)
 		}
 	case reflect.Array, reflect.Slice:
+		// 数组和切片的处理
 		switch verb {
 		case 's', 'q', 'x', 'X':
 			// Handle byte and uint8 slices and arrays special for the above verbs.
@@ -1154,7 +1165,7 @@ func (p *pp) doPrint(a []interface{}) {
 	prevString := false
 	for argNum, arg := range a {
 		isString := arg != nil && reflect.TypeOf(arg).Kind() == reflect.String
-		// Add a space between two non-string arguments.
+		// 在两个非 string 参数之间增加一个空格.
 		if argNum > 0 && !isString && !prevString {
 			p.buf.writeByte(' ')
 		}
@@ -1163,8 +1174,8 @@ func (p *pp) doPrint(a []interface{}) {
 	}
 }
 
-// doPrintln is like doPrint but always adds a space between arguments
-// and a newline after the last argument.
+// doPrintln 类似于 doPrint，但总是在参数之间添加空格
+// 在最后一个参数之后有一个换行符.
 func (p *pp) doPrintln(a []interface{}) {
 	for argNum, arg := range a {
 		if argNum > 0 {

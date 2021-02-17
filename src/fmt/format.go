@@ -19,7 +19,7 @@ const (
 	unsigned = false
 )
 
-// flags placed in a separate struct for easy clearing.
+// fmtFlags 放置到一个单独的 struct 中，这样方便进行清空整个 struct.
 type fmtFlags struct {
 	widPresent  bool
 	precPresent bool
@@ -29,15 +29,15 @@ type fmtFlags struct {
 	space       bool
 	zero        bool
 
-	// For the formats %+v %#v, we set the plusV/sharpV flags
-	// and clear the plus/sharp flags since %+v and %#v are in effect
-	// different, flagless formats set at the top level.
+	// 对于格式%+v 、 %#v，分别对应 plusV / sharpV 标志
+	// 并清除plus / sharp标志 .
+	// %#v 会执行 GoStringer 的 GoString()
 	plusV  bool
 	sharpV bool
 }
 
-// A fmt is the raw formatter used by Printf etc.
-// It prints into a buffer that must be set up separately.
+// fmt  是 Printf 等格式化输出的基础.
+// 它打印到一个单独设立的 buffer 中.
 type fmt struct {
 	buf *buffer
 
@@ -60,25 +60,26 @@ func (f *fmt) init(buf *buffer) {
 	f.clearflags()
 }
 
-// writePadding generates n bytes of padding.
+// writePadding 在 f.buf 后面直接生成 n 个填充字节.
 func (f *fmt) writePadding(n int) {
-	if n <= 0 { // No padding bytes needed.
+	if n <= 0 { // 无需填充
 		return
 	}
 	buf := *f.buf
 	oldLen := len(buf)
 	newLen := oldLen + n
-	// Make enough room for padding.
+	// 根据需要填充的字节数以及原来 buf 的长度，给 buf 开辟新的内存空间.
 	if newLen > cap(buf) {
 		buf = make(buffer, cap(buf)*2+n)
 		copy(buf, *f.buf)
 	}
-	// Decide which byte the padding should be filled with.
+	// 决定 padByte 的字节的内容.
+	// 默认是空格，如果设置了 f.zero 那就是 0 填充
 	padByte := byte(' ')
 	if f.zero {
 		padByte = byte('0')
 	}
-	// Fill padding with padByte.
+	// 使用 padByte 填充.padding 大小的空间，
 	padding := buf[oldLen:newLen]
 	for i := range padding {
 		padding[i] = padByte
@@ -86,7 +87,8 @@ func (f *fmt) writePadding(n int) {
 	*f.buf = buf[:newLen]
 }
 
-// pad appends b to f.buf, padded on left (!f.minus) or right (f.minus).
+// pad 追加 b 到 f.buf 中,
+// 如果 !f.minus 追加在左侧，反之 (f.minus) 右侧 .
 func (f *fmt) pad(b []byte) {
 	if !f.widPresent || f.wid == 0 {
 		f.buf.write(b)
@@ -94,17 +96,17 @@ func (f *fmt) pad(b []byte) {
 	}
 	width := f.wid - utf8.RuneCount(b)
 	if !f.minus {
-		// left padding
+		// 在左侧填充
 		f.writePadding(width)
 		f.buf.write(b)
 	} else {
-		// right padding
+		// 右侧填充
 		f.buf.write(b)
 		f.writePadding(width)
 	}
 }
 
-// padString appends s to f.buf, padded on left (!f.minus) or right (f.minus).
+// padString 追加字符串 s 到 f.buf, 如果 !f.minus 追加在左侧，反之 (f.minus) 右侧 ..
 func (f *fmt) padString(s string) {
 	if !f.widPresent || f.wid == 0 {
 		f.buf.writeString(s)
@@ -112,17 +114,17 @@ func (f *fmt) padString(s string) {
 	}
 	width := f.wid - utf8.RuneCountInString(s)
 	if !f.minus {
-		// left padding
+		// 左边追加
 		f.writePadding(width)
 		f.buf.writeString(s)
 	} else {
-		// right padding
+		// 右边追加
 		f.buf.writeString(s)
 		f.writePadding(width)
 	}
 }
 
-// fmtBoolean formats a boolean.
+// fmtBoolean 格式化输出 bool 类型.
 func (f *fmt) fmtBoolean(v bool) {
 	if v {
 		f.padString("true")
@@ -131,7 +133,7 @@ func (f *fmt) fmtBoolean(v bool) {
 	}
 }
 
-// fmtUnicode formats a uint64 as "U+0078" or with f.sharp set as "U+0078 'x'".
+// fmtUnicode 将 uint64 格式化为 “U+0078” 或将 f.sharp 设置为 “U+0078'x'”.
 func (f *fmt) fmtUnicode(u uint64) {
 	buf := f.intbuf[0:]
 
@@ -190,7 +192,7 @@ func (f *fmt) fmtUnicode(u uint64) {
 	f.zero = oldZero
 }
 
-// fmtInteger formats signed and unsigned integers.
+// fmtInteger 格式化 signed （有符号） 和 unsigned （无符号） 整数.
 func (f *fmt) fmtInteger(u uint64, base int, isSigned bool, verb rune, digits string) {
 	negative := isSigned && int64(u) < 0
 	if negative {
@@ -198,24 +200,23 @@ func (f *fmt) fmtInteger(u uint64, base int, isSigned bool, verb rune, digits st
 	}
 
 	buf := f.intbuf[0:]
-	// The already allocated f.intbuf with a capacity of 68 bytes
-	// is large enough for integer formatting when no precision or width is set.
+	// 当没有设置精度或宽度时，
+	//  已经分配的容量为 68 字节的 f.intbuf 足够进行整数格式化
 	if f.widPresent || f.precPresent {
-		// Account 3 extra bytes for possible addition of a sign and "0x".
-		width := 3 + f.wid + f.prec // wid and prec are always positive.
+		// 额外增加 3 个字节，因为可能是带符号的或者"0x".
+		width := 3 + f.wid + f.prec // wid 和 prec 总是正数.
 		if width > len(buf) {
-			// We're going to need a bigger boat.
+			// 根据最新的width，重新分配内存给 buf.
 			buf = make([]byte, width)
 		}
 	}
 
-	// Two ways to ask for extra leading zero digits: %.3d or %03d.
-	// If both are specified the f.zero flag is ignored and
-	// padding with spaces is used instead.
+	// 要求额外的前置 zero digits : %.3d or %03d.
+	// 如果两者都被指定，则忽略 f.zero 标志并使用空格填充。.
 	prec := 0
 	if f.precPresent {
 		prec = f.prec
-		// Precision of 0 and value of 0 means "print nothing" but padding.
+		// 精度为 0 并且值为 0 意味着 “除了填充之外什么也不打印” 。
 		if prec == 0 && u == 0 {
 			oldZero := f.zero
 			f.zero = false
