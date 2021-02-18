@@ -234,6 +234,7 @@ func (f *fmt) fmtInteger(u uint64, base int, isSigned bool, verb rune, digits st
 	// Because printing is easier right-to-left: format u into buf, ending at buf[i].
 	// We could make things marginally faster by splitting the 32-bit case out
 	// into a separate block but it's not worth the duplication, so u has 64 bits.
+	// 这里 i 为最大长度的原因是为了能给在计算时方便直接从右往左边计算
 	i := len(buf)
 	// Use constants for the division and modulo for more efficient code.
 	// Switch cases ordered by popularity.
@@ -321,7 +322,7 @@ func (f *fmt) fmtInteger(u uint64, base int, isSigned bool, verb rune, digits st
 	f.zero = oldZero
 }
 
-// truncate truncates the string s to the specified precision, if present.
+// truncate 按照 f.prec 的精度，将 s 截断为指定的长度.
 func (f *fmt) truncateString(s string) string {
 	if f.precPresent {
 		n := f.prec
@@ -335,7 +336,7 @@ func (f *fmt) truncateString(s string) string {
 	return s
 }
 
-// truncate truncates the byte slice b as a string of the specified precision, if present.
+// truncate 将字节切片 b 按照字符串的方式进行截断.
 func (f *fmt) truncate(b []byte) []byte {
 	if f.precPresent {
 		n := f.prec
@@ -345,6 +346,9 @@ func (f *fmt) truncate(b []byte) []byte {
 				return b[:i]
 			}
 			wid := 1
+
+			// utf8.RuneSelf 表示单字节编码的utf-8
+			// 所以，如果大于说明不是单字节，就需要处理
 			if b[i] >= utf8.RuneSelf {
 				_, wid = utf8.DecodeRune(b[i:])
 			}
@@ -354,26 +358,26 @@ func (f *fmt) truncate(b []byte) []byte {
 	return b
 }
 
-// fmtS formats a string.
+// fmtS 格式化字符串.
 func (f *fmt) fmtS(s string) {
 	s = f.truncateString(s)
 	f.padString(s)
 }
 
-// fmtBs formats the byte slice b as if it was formatted as string with fmtS.
+// fmtBs 将字节切换按照字符串格式化，类似于 fmtS.
 func (f *fmt) fmtBs(b []byte) {
 	b = f.truncate(b)
 	f.pad(b)
 }
 
-// fmtSbx formats a string or byte slice as a hexadecimal encoding of its bytes.
+// fmtSbx 将字符串和字节切片格式化为16进制.
 func (f *fmt) fmtSbx(s string, b []byte, digits string) {
 	length := len(b)
 	if b == nil {
 		// No byte slice present. Assume string s should be encoded.
 		length = len(s)
 	}
-	// Set length to not process more bytes than the precision demands.
+	// 如果设置了精度，那么按照 f.prec 的值进行设置 length.
 	if f.precPresent && f.prec < length {
 		length = f.prec
 	}
@@ -381,23 +385,23 @@ func (f *fmt) fmtSbx(s string, b []byte, digits string) {
 	width := 2 * length
 	if width > 0 {
 		if f.space {
-			// Each element encoded by two hexadecimals will get a leading 0x or 0X.
+			// 每两个16进制编码的元素会有一个前缀 0x 或 0X.
 			if f.sharp {
 				width *= 2
 			}
-			// Elements will be separated by a space.
+			// 每两个元素之间都会有一个空格.
 			width += length - 1
 		} else if f.sharp {
 			// Only a leading 0x or 0X will be added for the whole string.
 			width += 2
 		}
-	} else { // The byte slice or string that should be encoded is empty.
+	} else { // 空的字符串和切片无需进行处理了.
 		if f.widPresent {
 			f.writePadding(f.wid)
 		}
 		return
 	}
-	// Handle padding to the left.
+	// 左侧填充.
 	if f.widPresent && f.wid > width && !f.minus {
 		f.writePadding(f.wid - width)
 	}
@@ -422,7 +426,7 @@ func (f *fmt) fmtSbx(s string, b []byte, digits string) {
 		} else {
 			c = s[i] // Take a byte from the input string.
 		}
-		// Encode each byte as two hexadecimal digits.
+		// 将每个字节编码为两个十六进制数字.
 		buf = append(buf, digits[c>>4], digits[c&0xF])
 	}
 	*f.buf = buf
@@ -432,19 +436,19 @@ func (f *fmt) fmtSbx(s string, b []byte, digits string) {
 	}
 }
 
-// fmtSx formats a string as a hexadecimal encoding of its bytes.
+// fmtSx 将字符串格式化为字节的十六进制编码.
 func (f *fmt) fmtSx(s, digits string) {
 	f.fmtSbx(s, nil, digits)
 }
 
-// fmtBx formats a byte slice as a hexadecimal encoding of its bytes.
+// fmtBx 将字节切片格式化为字节的十六进制编码.
 func (f *fmt) fmtBx(b []byte, digits string) {
 	f.fmtSbx("", b, digits)
 }
 
-// fmtQ formats a string as a double-quoted, escaped Go string constant.
-// If f.sharp is set a raw (backquoted) string may be returned instead
-// if the string does not contain any control characters other than tab.
+// fmtQ 将字符串格式化为双引号转义的 Go 字符串常量。.
+// 如果设置了 f.sharp，则如果字符串不包含除制表符以外的任何控制字符
+// 则可以返回一个原始字符串.
 func (f *fmt) fmtQ(s string) {
 	s = f.truncateString(s)
 	if f.sharp && strconv.CanBackquote(s) {
@@ -459,8 +463,8 @@ func (f *fmt) fmtQ(s string) {
 	}
 }
 
-// fmtC formats an integer as a Unicode character.
-// If the character is not valid Unicode, it will print '\ufffd'.
+// fmtC 将整数格式化为 Unicode 字符.
+// 如果字符不是有效的 Unicode，它将打印 '\ufffd'.
 func (f *fmt) fmtC(c uint64) {
 	r := rune(c)
 	if c > utf8.MaxRune {
@@ -471,8 +475,8 @@ func (f *fmt) fmtC(c uint64) {
 	f.pad(buf[:w])
 }
 
-// fmtQc formats an integer as a single-quoted, escaped Go character constant.
-// If the character is not valid Unicode, it will print '\ufffd'.
+// fmtQc 将整数格式化为单引号转义的 Go 字符常量.
+// 如果字符不是有效的 Unicode，它将打印 '\ufffd'.
 func (f *fmt) fmtQc(c uint64) {
 	r := rune(c)
 	if c > utf8.MaxRune {
@@ -486,8 +490,8 @@ func (f *fmt) fmtQc(c uint64) {
 	}
 }
 
-// fmtFloat formats a float64. It assumes that verb is a valid format specifier
-// for strconv.AppendFloat and therefore fits into a byte.
+// fmtFloat 格式化 float64. 这里假设 verb 对 strconv.AppendFloat 是有效的
+// 所以只需要一个字节即可.
 func (f *fmt) fmtFloat(v float64, size int, verb rune, prec int) {
 	// Explicit precision in format specifier overrules default precision.
 	if f.precPresent {
