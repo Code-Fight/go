@@ -322,7 +322,7 @@ func (f *fmt) fmtInteger(u uint64, base int, isSigned bool, verb rune, digits st
 	f.zero = oldZero
 }
 
-// truncate 按照 f.prec 的精度，将 s 截断为指定的长度.
+// truncateString 按照 f.prec 的精度，将 s 截断为指定的长度.
 func (f *fmt) truncateString(s string) string {
 	if f.precPresent {
 		n := f.prec
