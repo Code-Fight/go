@@ -87,8 +87,8 @@ type uintptr uintptr
 // integer values.
 type byte = uint8
 
-// rune is an alias for int32 and is equivalent to int32 in all ways. It is
-// used, by convention, to distinguish character values from integer values.
+// rune 是 int32 的别名，完全等价于 int32 .
+// 按照惯例, 它用于区分字符值和整数值.
 type rune = int32
 
 // iota is a predeclared identifier representing the untyped integer ordinal

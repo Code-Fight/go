@@ -13,8 +13,8 @@ import (
 	"unicode/utf8"
 )
 
-// Strings for use with buffer.WriteString.
-// This is less overhead than using buffer.Write with byte arrays.
+// 与 buffer.WriteString() 配合使用的字符串常量.
+// 这样比使用字节数组与 buffer.Write 配合使用消耗要少.
 const (
 	commaSpaceString  = ", "
 	nilAngleString    = "<nil>"
@@ -32,7 +32,7 @@ const (
 	invReflectString  = "<invalid reflect.Value>"
 )
 
-// State represents the printer state passed to custom formatters.
+// State 表示传递给 Formatter 的 printer 的状态.
 // It provides access to the io.Writer interface plus information about
 // the flags and options for the operand's format specifier.
 type State interface {
@@ -53,44 +53,52 @@ type Formatter interface {
 	Format(f State, c rune)
 }
 
-// Stringer is implemented by any value that has a String method,
-// which defines the ``native'' format for that value.
-// The String method is used to print values passed as an operand
-// to any format that accepts a string or to an unformatted printer
-// such as Print.
+// Stringer 代表任意的一个值实现有 String 方法,
+// 它定义这个值最基本的格式化格式.
+// String 方法将作为某个值按照格式化或未格式化打印出来.
 type Stringer interface {
 	String() string
 }
 
-// GoStringer is implemented by any value that has a GoString method,
-// which defines the Go syntax for that value.
-// The GoString method is used to print values passed as an operand
-// to a %#v format.
+// GoStringer 代表任意的一个值实现有 GoString 方法,
+// 它定义了这个值的 Go syntax (Go 语言特有的输出格式).
+// GoString 用来打印按照 %#v 格式化后的值
 type GoStringer interface {
 	GoString() string
 }
 
-// Use simple []byte instead of bytes.Buffer to avoid large dependency.
+// 使用 []byte 而不是 bytes.Buffer 来避免较大的依赖性.
+// 然后定义一个 []byte 的别名，方便在 print 内部使用
 type buffer []byte
 
+// 实现一个自定义类型 buffer 的 write 方法，
+// 实际上，并没有IO操作，只是一个对 buffer 的 append
 func (b *buffer) write(p []byte) {
 	*b = append(*b, p...)
 }
 
+// 跟 write 类似，只不过参数是一个 string
 func (b *buffer) writeString(s string) {
 	*b = append(*b, s...)
 }
 
+// 跟 write 类似，但是用于只单个 byte
 func (b *buffer) writeByte(c byte) {
 	*b = append(*b, c)
 }
 
+// 跟 write 类似，主要用于字符(rune)
+// rune 是一个特殊的类型，它用于区分字符值和整数值
 func (bp *buffer) writeRune(r rune) {
+	// 因为是字符，就涉及到编码的问题
+	// 所以先进行判断是否超过用一个byte来表示一个字符的大小
 	if r < utf8.RuneSelf {
 		*bp = append(*bp, byte(r))
 		return
 	}
 
+	// 如果超过，那么就要按照utf-8规则，进行编码处理
+	// 也就是将一个字符，拆分到多个byte中
 	b := *bp
 	n := len(b)
 	for n+utf8.UTFMax > cap(b) {
@@ -111,6 +119,7 @@ type pp struct {
 	value reflect.Value
 
 	// fmt 用于指示如何格式化，如整数或字符串.
+	// 这里的 fmt 指向了我们上一节中介绍的 format.go
 	fmt fmt
 
 	// reordered 记录格式字符串是否使用了参数重新排序.
@@ -127,11 +136,12 @@ type pp struct {
 	wrappedErr error
 }
 
+// pp 的 sync.Pool
 var ppFree = sync.Pool{
 	New: func() interface{} { return new(pp) },
 }
 
-// newPrinter allocates a new pp struct or grabs a cached one.
+// newPrinter 新分配一个 pp 或者从缓存中拿一个.
 func newPrinter() *pp {
 	p := ppFree.Get().(*pp)
 	p.panicking = false
@@ -141,7 +151,7 @@ func newPrinter() *pp {
 	return p
 }
 
-// free saves used pp structs in ppFree; avoids an allocation per invocation.
+// free 将使用完 pp 放回 ppFree; 避免每次使用的调用.
 func (p *pp) free() {
 	// Proper usage of a sync.Pool requires each entry to have approximately
 	// the same memory cost. To obtain this property when the stored type
@@ -149,6 +159,11 @@ func (p *pp) free() {
 	// to place back in the pool.
 	//
 	// See https://golang.org/issue/23199
+
+	// 这里可以说是一个 sync.Pool 的踩坑经验了，
+	// 核心思想是在使用 sync.Pool 的时候，要尽量的保证放回条目保持大概一样的内存消耗
+	// 所以，我们以后再使用  sync.Pool 的时候，也一定要注意这一点
+	// 这里只会将小于 65535 个 byte 的条目放回
 	if cap(p.buf) > 64<<10 {
 		return
 	}
@@ -165,6 +180,11 @@ func (p *pp) Width() (wid int, ok bool) { return p.fmt.wid, p.fmt.widPresent }
 func (p *pp) Precision() (prec int, ok bool) { return p.fmt.prec, p.fmt.precPresent }
 
 func (p *pp) Flag(b int) bool {
+
+	// 这里要提醒一下: ' ' 这是一个字符
+	// 在Go中字符表示用rune，rune 又是 int32 的别名
+	// 所以，如果后续你的项目中有类似字符匹配的需求
+	// 不要再搞一个string 的参数 然后 case "" 了
 	switch b {
 	case '-':
 		return p.fmt.minus
@@ -180,15 +200,14 @@ func (p *pp) Flag(b int) bool {
 	return false
 }
 
-// Implement Write so we can call Fprintf on a pp (through State), for
-// recursive use in custom verbs.
+// 实现了 State 的 Write 接口，所以可以直接调用 Fprintf 在 pp
+// 方便格式化 verbs 的递归调用.
 func (p *pp) Write(b []byte) (ret int, err error) {
 	p.buf.write(b)
 	return len(b), nil
 }
 
-// Implement WriteString so that we can call io.WriteString
-// on a pp (through state), for efficiency.
+// 实现 WriteString 接口，所以可以直接调用 io.WriteString 在 pp 上.
 func (p *pp) WriteString(s string) (ret int, err error) {
 	p.buf.writeString(s)
 	return len(s), nil
