@@ -213,10 +213,10 @@ func (p *pp) WriteString(s string) (ret int, err error) {
 	return len(s), nil
 }
 
-// These routines end in 'f' and take a format string.【
+// 下面这些以 "f" 结尾的方法，都支持格式化的能力.
 
-// Fprintf formats according to a format specifier and writes to w.
-// It returns the number of bytes written and any write error encountered.
+// Fprintf 根据 format 参数指定的格式进行格式化后写入到 w 中.
+// 返回写入成功的字节数和发生的错误.
 func Fprintf(w io.Writer, format string, a ...interface{}) (n int, err error) {
 	p := newPrinter()
 	p.doPrintf(format, a)
@@ -225,13 +225,13 @@ func Fprintf(w io.Writer, format string, a ...interface{}) (n int, err error) {
 	return
 }
 
-// Printf formats according to a format specifier and writes to standard output.
-// It returns the number of bytes written and any write error encountered.
+// Printf 根据 format 参数指定的格式进行格式化后写入到标准输出(os.Stdout)中.
+// 返回写入成功的字节数和发生的错误.
 func Printf(format string, a ...interface{}) (n int, err error) {
 	return Fprintf(os.Stdout, format, a...)
 }
 
-// Sprintf formats according to a format specifier and returns the resulting string.
+// Sprintf 根据 format 参数指定的格式进行格式化后返回 string.
 func Sprintf(format string, a ...interface{}) string {
 	p := newPrinter()
 	p.doPrintf(format, a)
@@ -240,11 +240,11 @@ func Sprintf(format string, a ...interface{}) string {
 	return s
 }
 
-// These routines do not take a format string
+// 从这里往下的方法不提供格式化能力
 
-// Fprint formats using the default formats for its operands and writes to w.
-// Spaces are added between operands when neither is a string.
-// It returns the number of bytes written and any write error encountered.
+// Fprint 根据 a 的默认格式化方式格式化后写入到 w 中.
+// 当不是 string 时，会在两个格式化后的结果之间增加一个空格.
+// 返回写入成功的字节数和发生的错误.
 func Fprint(w io.Writer, a ...interface{}) (n int, err error) {
 	p := newPrinter()
 	p.doPrint(a)
@@ -253,15 +253,15 @@ func Fprint(w io.Writer, a ...interface{}) (n int, err error) {
 	return
 }
 
-// Print formats using the default formats for its operands and writes to standard output.
-// Spaces are added between operands when neither is a string.
-// It returns the number of bytes written and any write error encountered.
+// Print 根据 a 的默认格式化方式格式化后写入到标准输出(os.Stdout)中.
+// 当不是 string 时，会在两个格式化后的结果之间增加一个空格.
+// 返回写入成功的字节数和发生的错误.
 func Print(a ...interface{}) (n int, err error) {
 	return Fprint(os.Stdout, a...)
 }
 
-// Sprint formats using the default formats for its operands and returns the resulting string.
-// Spaces are added between operands when neither is a string.
+// Sprint 根据 a 的默认格式化方式格式化后转成 string 返回.
+// 当不是 string 时，会在两个格式化后的结果之间增加一个空格.
 func Sprint(a ...interface{}) string {
 	p := newPrinter()
 	p.doPrint(a)
@@ -270,9 +270,9 @@ func Sprint(a ...interface{}) string {
 	return s
 }
 
-// These routines end in 'ln', do not take a format string,
-// always add spaces between operands, and add a newline
-// after the last operand.
+// 下面这些以 "ln" 结尾的方法，不支持自定义格式化标准
+// 但是，会始终在两个被打印的对象之间增加一个空格，
+// 以及，在打印结束的最后，增加一个换行符.
 
 // Fprintln formats using the default formats for its operands and writes to w.
 // Spaces are always added between operands and a newline is appended.
@@ -292,8 +292,8 @@ func Println(a ...interface{}) (n int, err error) {
 	return Fprintln(os.Stdout, a...)
 }
 
-// Sprintln formats using the default formats for its operands and returns the resulting string.
-// Spaces are always added between operands and a newline is appended.
+// Sprintln 使用默认的格式化参数格式化并转为 string 返回.
+// 如果传入多个要打印的对象，会在不同的对象之间增加空格.
 func Sprintln(a ...interface{}) string {
 	p := newPrinter()
 	p.doPrintln(a)
@@ -312,14 +312,13 @@ func getField(v reflect.Value, i int) reflect.Value {
 	return val
 }
 
-// tooLarge reports whether the magnitude of the integer is
-// too large to be used as a formatting width or precision.
+// tooLarge 检查整数的大小是否太大而不能用作格式化宽度或精度.
 func tooLarge(x int) bool {
 	const max int = 1e6
 	return x > max || x < -max
 }
 
-// parsenum converts ASCII to integer.  num is 0 (and isnum is false) if no number present.
+// parsenum 将ASCII转换为 int. 如果没有数字，则num为0（且 isnum 为false）.
 func parsenum(s string, start, end int) (num int, isnum bool, newi int) {
 	if start >= end {
 		return 0, false, end
@@ -334,6 +333,7 @@ func parsenum(s string, start, end int) (num int, isnum bool, newi int) {
 	return
 }
 
+// 对未知类型的 value 的处理
 func (p *pp) unknownType(v reflect.Value) {
 	if !v.IsValid() {
 		p.buf.writeString(nilAngleString)
@@ -365,6 +365,8 @@ func (p *pp) badVerb(verb rune) {
 	p.erroring = false
 }
 
+// 根据指定的 verb 格式化 bool 值
+// 主要做了一层过滤，只有在 't', 'v' 的时候 才会进行格式化
 func (p *pp) fmtBool(v bool, verb rune) {
 	switch verb {
 	case 't', 'v':
@@ -374,8 +376,8 @@ func (p *pp) fmtBool(v bool, verb rune) {
 	}
 }
 
-// fmt0x64 formats a uint64 in hexadecimal and prefixes it with 0x or
-// not, as requested, by temporarily setting the sharp flag.
+// fmt0x64 通过临时修改 sharp 标志来将 uint64 格式化为十六进制格式
+// 并根据参数 leading0x 来控制，是否增加一个前缀 '0x'.
 func (p *pp) fmt0x64(v uint64, leading0x bool) {
 	sharp := p.fmt.sharp
 	p.fmt.sharp = leading0x
